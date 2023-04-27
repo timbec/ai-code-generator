@@ -44,7 +44,7 @@ def home(request):
         if lang == "Select Programming Language":
             messages.success(request, "Please select a programming language")
 
-        response = get_openai_response(code, 2, lang)
+        response = get_openai_response(code, 1, lang)
 
         if response is not None:
             record = Code(question=code, code_answer=response,
