@@ -3,7 +3,6 @@ from django.shortcuts import render
 from django.shortcuts import render, redirect
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
-from django.contrib.auth.forms import UserCreationForm
 from .forms import SignUpForm
 
 import openai
@@ -11,96 +10,72 @@ import os
 
 from .models import Code
 
-# Create your views here.
+LANG_LIST = ['c', 'clike', 'cpp', 'csharp', 'css', 'dart', 'django', 'go', 'html', 'java', 'javascript', 'markup', 'markup-templating', 'matlab',
+             'mongodb', 'objectivec', 'perl', 'php', 'powershell', 'python', 'r', 'regex', 'ruby', 'rust', 'sass', 'scala', 'sql', 'swift', 'yaml']
+
+def get_openai_response(prompt, temperature, lang=None):
+    openai.api_key = os.getenv('API_KEY')
+    openai.Model.list()
+
+    full_prompt = prompt
+    if lang is not None:
+        full_prompt = f"Respond only with code in {lang} language: {prompt}"
+
+    try:
+        response = openai.Completion.create(
+            engine="text-davinci-003",
+            prompt=full_prompt,
+            temperature=temperature,
+            max_tokens=1000,
+            top_p=1,
+            frequency_penalty=0,
+            presence_penalty=0,
+        )
+        return response['choices'][0]['text'].strip()
+    except Exception as e:
+        print(e)
+        return None
 
 
 def home(request):
-    api_key = os.getenv('API_KEY')
-    lang_list = ['c', 'clike', 'cpp', 'csharp', 'css', 'dart', 'django', 'go', 'html', 'java', 'javascript', 'markup', 'markup-templating', 'matlab',
-                 'mongodb', 'objectivec', 'perl', 'php', 'powershell', 'python', 'r', 'regex', 'ruby', 'rust', 'sass', 'scala', 'sql', 'swift', 'yaml']
-
     if request.method == "POST":
         code = request.POST['code']
         lang = request.POST['lang']
-        # check to make sure user choose a language
         if lang == "Select Programming Language":
             messages.success(request, "Please select a programming language")
 
-        # OPENAI Key
-        openai.api_key = api_key
-        openai.Model.list()
-        # make an open ai request
-        try:
-            response = openai.Completion.create(
-                engine="text-davinci-003",
-                prompt=f"Respond only with code in {lang} language: {code}",
-                temperature=2,
-                max_tokens=1000,
-                top_p=1,
-                frequency_penalty=0,
-                presence_penalty=0,
-            )
-            # parse the response
-            response = (response['choices'][0]['text'].strip())
+        response = get_openai_response(code, 2, lang)
 
-            # Save To Database
+        if response is not None:
             record = Code(question=code, code_answer=response,
                           language=lang, user=request.user)
             record.save()
 
-            return render(request, "home.html", {"lang_list": lang_list, 'response': response, 'lang': lang})
-        except Exception as e:
-            print(e)
-            return render(request, 'home.html', {'lang_list': lang_list, 'response': e, 'lang': lang})
+        return render(request, "home.html", {"lang_list": LANG_LIST, 'response': response, 'lang': lang})
 
-    return render(request, "home.html", {"lang_list": lang_list})
+    return render(request, "home.html", {"lang_list": LANG_LIST})
 
 
 def suggest(request):
-    api_key = os.getenv('API_KEY')
-    lang_list = ['c', 'clike', 'cpp', 'csharp', 'css', 'dart', 'django', 'go', 'html', 'java', 'javascript', 'markup', 'markup-templating', 'matlab',
-                 'mongodb', 'objectivec', 'perl', 'php', 'powershell', 'python', 'r', 'regex', 'ruby', 'rust', 'sass', 'scala', 'sql', 'swift', 'yaml']
-
     if request.method == "POST":
         code = request.POST['code']
         lang = request.POST['lang']
 
-        # Check to make sure they picked a lang
         if lang == "Select Programming Language":
             messages.success(
                 request, "Hey! You Forgot To Pick A Programming Language...")
-            return render(request, 'suggest.html', {'lang_list': lang_list, 'code': code, 'lang': lang, 'response': code})
+            return render(request, 'suggest.html', {'lang_list': LANG_LIST, 'code': code, 'lang': lang, 'response': code})
         else:
-            # OpenAI Key
-            openai.api_key = api_key
-            # Create OpenAI Instance
-            openai.Model.list()
-            # Make an OpenAI Request
-            try:
-                response = openai.Completion.create(
-                    engine='text-davinci-003',
-                    prompt=f"Respond only with code. {code}",
-                    temperature=1,
-                    max_tokens=1000,
-                    top_p=1.0,
-                    frequency_penalty=0.0,
-                    presence_penalty=0.0,
-                )
-                # Parse the response
-                response = (response["choices"][0]["text"]).strip()
+            response = get_openai_response(code, 1)
 
-                # Save To Database
+            if response is not None:
                 record = Code(question=code, code_answer=response,
                               language=lang, user=request.user)
                 record.save()
 
-                return render(request, 'suggest.html', {'lang_list': lang_list, 'response': response, 'lang': lang})
+            return render(request, 'suggest.html', {'lang_list': LANG_LIST, 'response': response, 'lang': lang})
 
-            except Exception as e:
-                print(e)
-                return render(request, 'suggest.html', {'lang_list': lang_list, 'response': e, 'lang': lang})
-
-    return render(request, 'suggest.html', {'lang_list': lang_list})
+    return render(request, 'suggest.html', {'lang_list': LANG_LIST})
 
 
 def login_user(request):
